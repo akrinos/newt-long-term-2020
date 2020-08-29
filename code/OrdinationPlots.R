@@ -3,6 +3,7 @@
 
 pacman::p_load(phyloseq,dplyr,ggplot2,vegan,adonis,ape,philentropy,loop,MASS)
 
+##### BACTERIAL ORDINATIONS #####
 ##### With the full dataset - applies to disturbance and newt ##### 
 otumat_newt = read.csv("./data/otutable.csv",row.names = 1)
 taxmat_newt = as.matrix(read.csv("./data/taxtable.csv",row.names = 1))
@@ -63,7 +64,7 @@ disturb = ggplot() +
         panel.grid.major = element_blank(),  #remove major-grid labels
         panel.grid.minor = element_blank(),  #remove minor-grid labels
         plot.background = element_blank())+
-  theme(legend.position = c(0.10,0.01),#c(0.97, 0.99),
+  theme(legend.position = c(0.01,0.01),
         legend.justification = c("left", "bottom"),legend.background = element_rect(fill = NA)) #,color="black"))
   coord_equal()
 
@@ -194,10 +195,11 @@ seasonpostdisturb1 = ggplot() +
         legend.justification = c("left", "bottom"),legend.background = element_rect(fill = NA))
 
 cowplot::plot_grid(disturb,seasonpredisturb,seasonpostdisturb1,ncol=1,labels = c("A","B","C"))
-ggsave("nmds_ords.pdf", height = 4 * 3, width = 4.5, units = "in")
+ggsave("plots/nmds_ords.pdf", height = 5 * 3, width = 5, units = "in")
+
+##### METABOLITE ORDINATIONS #####
 
 #### NMDS Jaccard ####
-
 metrich = read.csv("data/metabolite.csv")
 sampledata = read.csv("./data/sampledata.csv")
 metrich["Disturbance"] = as.character(sampledata$Disturbance[match(as.character(metrich$Date), 
@@ -350,5 +352,5 @@ seasonpostdisturb1_jaccard = ggplot() +
         legend.justification = c("left", "bottom"),legend.background = element_rect(fill = NA))
 
 cowplot::plot_grid(alldataplot,seasonpredisturb_jaccard,seasonpostdisturb1_jaccard,ncol=1,labels = c("A","B","C"))
-ggsave("nmds_ords_jaccard.pdf", height = 5 * 3, width = 5, units = "in")
+ggsave("plots/nmds_ords_jaccard.pdf", height = 5 * 3, width = 5, units = "in")
 

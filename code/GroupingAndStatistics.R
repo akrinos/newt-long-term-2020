@@ -380,7 +380,7 @@ plot_grid(family_plot_newt_season + xlab("")+theme(text = element_text(size=16))
           nrow = 2, labels = c("A", "B"), rel_heights = c(0.58,0.5))
 
 
-# Plot simpson evenness, OTU richness, and proportion of OTUs shared with initial Fall 2011 samples
+##### Plot simpson evenness, OTU richness, and proportion of OTUs shared with initial Fall 2011 samples #####
 
 newtda = data.frame(read.csv("./data/newt_data_manip.csv"))
 counts = apply(data.frame(apply(newtda[1:83,2:225], 2, function(x) as.numeric(as.character(x))) > 0), 1, sum)
@@ -442,19 +442,24 @@ gg = ggplot(meltednewtda) +
                             ymax=Inf),
             aes(xmin=xmin,xmax=xmax,ymin=ymin,ymax=ymax, fill = "Winter"),
             alpha=0.3) +
-  geom_line(aes(x = Date, y = value, group = AmphibID, colour = factor(AmphibID)), size = 1) +
-  geom_point(aes(x = (Date), y = value, group = AmphibID, colour = factor(AmphibID)), size = 2) +
-  geom_errorbar(data = meanmelted, aes(x=(Date), ymin=means-sds, ymax=means+sds), colour="black", width=40, size = 1) + 
+  geom_line(data = meanmelted, aes(x = (Date), y = means, group = 1), color = "black", size = 3) + ylim(0, 175) + 
+  geom_errorbar(data = meanmelted, aes(x=(Date), ymin=means-sds, ymax=means+sds), colour="black", width=40, size = 0.75) + 
+  geom_ribbon(aes(x=Date, y=means, ymax=means+sds, ymin=means-sds), 
+              alpha=0.4, fill = "black") + 
   geom_point(data = meanmelted, aes(x = (Date), y = means, color = "Mean"), size = 3) + 
+  #geom_line(aes(x = Date, y = value, group = AmphibID, colour = factor(AmphibID)), size = 0.5) +
+  geom_point(aes(x = (Date), y = value, group = AmphibID, colour = factor(AmphibID)), size = 2) +
   scale_color_manual("Newt ID", #breaks = c(1:8,"Mean"), values =c(brewer.pal(8, "Spectral"), "black")) +
-                     breaks = c(levels(factor(meltednewtda$AmphibID)), "Mean"), values =c(brewer.pal(8, "Spectral"), "black"))+
-  geom_line(data = meanmelted, aes(x = (Date), y = means, group = 1), color = "black", size = 2) + ylim(0, 175) + 
+                     breaks = c(levels(factor(meltednewtda$AmphibID)), "Mean"), values =c(brewer.pal(8, "Dark2"), "black"))+
   geom_vline(xintercept = as.Date("7.15.12", format = "%m.%d.%y"), linetype = "dotdash", size = 1.5) + 
   geom_vline(xintercept = as.Date("7.1.13", format = "%m.%d.%y"), linetype = "dotdash", size = 1.5) +
+  xlab("Date") + 
   scale_fill_manual('Season',
-                    values = c('green', 'red', 'brown', 'lightblue'),  
+                    values = gray.colors(4, start = 0.3, end = 0.9),
+                    #values = c('green', 'red', 'brown', 'lightblue'),  
                     guide = guide_legend(override.aes = list(alpha = 0.2))) 
 gg
+ggsave("testnewtplot.png", dpi=5000, width=8,height=6,units="in")
 
 newtda = data.frame(read.csv("./data/newt_data_manip.csv"))
 newtda = newtda %>%
@@ -506,7 +511,8 @@ hh = ggplot(meltednewtda) +
   geom_vline(xintercept = as.Date("7.15.12", format = "%m.%d.%y"), linetype = "dotdash", size = 1.5) + 
   geom_vline(xintercept = as.Date("7.1.13", format = "%m.%d.%y"), linetype = "dotdash", size = 1.5) +
   scale_fill_manual('Season',
-                    values = c('green', 'red', 'brown', 'lightblue'),  
+                    values = gray.colors(4, start = 0.3, end = 0.9),
+                    #values = c('green', 'red', 'brown', 'lightblue'),  
                     guide = guide_legend(override.aes = list(alpha = 0.2)))
 hh
 
@@ -629,7 +635,8 @@ ii = ggplot(sourcetrack) +
   geom_vline(xintercept = as.Date("7.15.12", format = "%m.%d.%y"), linetype = "dotdash", size = 1.5) + 
   geom_vline(xintercept = as.Date("7.1.13", format = "%m.%d.%y"), linetype = "dotdash", size = 1.5) +
   scale_fill_manual('Season',
-                    values = c('green', 'red', 'brown', 'lightblue'),  
+                    values = gray.colors(4, start = 0.3, end = 0.9),
+                    #values = c('green', 'red', 'brown', 'lightblue'),  
                     guide = guide_legend(override.aes = list(alpha = 0.2))) +
   xlab("Date")
 ii
