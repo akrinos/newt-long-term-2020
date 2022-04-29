@@ -65,7 +65,7 @@ disturb = ggplot() +
         panel.grid.minor = element_blank(),  #remove minor-grid labels
         plot.background = element_blank())+
   theme(legend.position = c(0.01,0.01),
-        legend.justification = c("left", "bottom"),legend.background = element_rect(fill = NA)) #,color="black"))
+        legend.justification = c("left", "bottom"),legend.background = element_rect(fill = NA))+ #,color="black"))
   coord_equal()
 
 ##### by season for pre disturb##### 
@@ -128,7 +128,7 @@ seasonpredisturb = ggplot() +
         panel.grid.minor = element_blank(),  #remove minor-grid labels
         plot.background = element_blank())+
   theme(legend.position = c(0.01,0.01),#c(0.97, 0.99),
-        legend.justification = c("left", "bottom"),legend.background = element_rect(fill = NA))#,color="black"))
+        legend.justification = c("left", "bottom"),legend.background = element_rect(fill = NA))+#,color="black"))
   coord_equal()
 
 
@@ -195,6 +195,8 @@ seasonpostdisturb1 = ggplot() +
         legend.justification = c("left", "bottom"),legend.background = element_rect(fill = NA))
 
 cowplot::plot_grid(disturb,seasonpredisturb,seasonpostdisturb1,ncol=1,labels = c("A","B","C"))
+ggsave(file="figure2.tiff",dpi=500,width=5,height=15,units="in")
+
 ggsave("plots/nmds_ords.pdf", height = 5 * 3, width = 5, units = "in")
 
 ##### METABOLITE ORDINATIONS #####
@@ -354,3 +356,4 @@ seasonpostdisturb1_jaccard = ggplot() +
 cowplot::plot_grid(alldataplot,seasonpredisturb_jaccard,seasonpostdisturb1_jaccard,ncol=1,labels = c("A","B","C"))
 ggsave("plots/nmds_ords_jaccard.pdf", height = 5 * 3, width = 5, units = "in")
 
+ggsave(file="figure6.tiff",dpi=500,width=5,height=15,units="in")

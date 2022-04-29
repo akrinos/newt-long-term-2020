@@ -1,0 +1,357 @@
+---
+title: "MantelProcrustes"
+author: "Arianna Krinos"
+date: "9/3/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/akrinos/Documents/Virginia Tech/Belden Lab/newt-long-term-2020")
+setwd("/Users/akrinos/Documents/Virginia Tech/Belden Lab/newt-long-term-2020")
+```
+
+## Walking through Mantel/Procrustes
+
+```{r downloads, include=FALSE}
+pacman::p_load(devtools,tidyverse,stringr,qdapRegex,reshape2,plyr,
+               RColorBrewer,vegan,proxy,philentropy,ade4,ape)
+```
+
+Start by reading in microbiome and metabolite data:
+
+```{r read}
+metabolite = read.csv("./data/metabolite.csv")
+tomelt = read.csv("./data/LTEE_Newt_Seasonal_OTU_table_97_forprimer.csv")
+tomelt = subset(tomelt, select = c(X.OTU.ID, AmphibID, Timepoint, Date, 
+                                   Substrate.Addition))
+
+# we only consider the timepoints/newts with both metabolite & microbiome data
+metabolite = metabolite %>% left_join(tomelt, by = c("NewtID"="AmphibID",
+                                                     "Timepoint", "Date")) %>%
+  tidyr::drop_na(X.OTU.ID)
+otulist = unique(as.character(metabolite$X.OTU.ID))
+disturbance = as.character(metabolite$Substrate.Addition)
+
+metabolite = subset(metabolite, select = -c(NewtID,	Timepoint,	Date,
+                                            Month,	Season,	Year,	Season_Year,
+                                            Month_Year,	Temp,	DO,	pH,	count,
+                                            X.OTU.ID,Substrate.Addition))
+
+microbiome = read.csv("./data/LTEE_Newt_Seasonal_2.csv")
+microbiome = microbiome[,as.character(colnames(microbiome)) %in% otulist]
+microbiome = microbiome[,otulist]
+microbiome = t(microbiome)
+```
+
+Now we use `vegan` to calculate distance matrices:
+
+```{r distances}
+metabolitedist = vegdist(metabolite, method="jaccard",na.rm=TRUE)
+microbiomedist = vegdist(microbiome, method="jaccard",na.rm=TRUE)
+```
+
+Let's look at the matrices and make sure they look alright: 
+
+```{r examine}
+#print(head(as.matrix(metabolitedist)))
+#print(head(as.matrix(microbiomedist)))
+```
+
+
+That's what we expect. Now let's perform a Mantel test. 
+
+But first, let's put this whole process into a function, so that we can do it again easily, and also subset if we want:
+
+```{r createfunction}
+processMetMic <- function(dist_metric="jaccard",substratefilter="") {
+  metabolite = read.csv("./data/metabolite.csv")
+  tomelt = read.csv("./data/LTEE_Newt_Seasonal_OTU_table_97_forprimer.csv")
+  tomelt = subset(tomelt, select = c(X.OTU.ID, AmphibID, Timepoint, Date, 
+                                     Substrate.Addition))
+  
+  # we only consider the timepoints/newts with both metabolite & microbiome data
+  if (substratefilter == "") {
+    metabolite = metabolite %>% left_join(tomelt, by = c("NewtID"="AmphibID",
+                                                         "Timepoint", "Date")) %>%
+      tidyr::drop_na(X.OTU.ID)
+  } else {
+    metabolite = metabolite %>% left_join(tomelt, by = c("NewtID"="AmphibID",
+                                                       "Timepoint", "Date")) %>%
+    tidyr::drop_na(X.OTU.ID) %>%
+    dplyr::filter(as.character(Substrate.Addition) == substratefilter) 
+    # choose from "Pre substrate addition", "Post substrate addition 1", 
+    # and "Post substrate addition 2"
+  }
+  otulist = unique(as.character(metabolite$X.OTU.ID))
+  
+  metabolite = subset(metabolite, select = -c(NewtID,	Timepoint,	Date,
+                                              Month,	Season,	Year,	Season_Year,
+                                              Month_Year,	Temp,	DO,	pH,	count,
+                                              X.OTU.ID,Substrate.Addition))
+  rownames(metabolite) = otulist
+  
+  microbiome = read.csv("./data/LTEE_Newt_Seasonal_2.csv")
+  microbiome = microbiome[,as.character(colnames(microbiome)) %in% otulist]
+  microbiome = microbiome[,otulist]
+  microbiome = t(microbiome)
+  
+  metabolitedist = vegdist(metabolite, method=dist_metric,na.rm=TRUE)
+  microbiomedist = vegdist(microbiome, method=dist_metric,na.rm=TRUE)
+  return(list("microbiomedist" = microbiomedist, "metabolitedist" = metabolitedist))
+}
+```
+
+Let's start with a Mantel test on the full dataset: 
+
+```{r mantelfull}
+results = processMetMic(dist_metric="jaccard",substratefilter = "")
+microbiomedist = results$microbiomedist
+metabolitedist = results$metabolitedist
+mantel.rtest(metabolitedist, microbiomedist, nrepet = 999)
+#mantel.test(metabolitedist, microbiomedist, nperm = 999, alternative = "two.sided")
+
+mantel(metabolitedist, microbiomedist, method="pearson", permutations=999, 
+       strata = NULL,
+    na.rm = FALSE, parallel = getOption("mc.cores"))
+```
+
+We can see that on the full dataset, the Mantel test is marginally significant (some stochastic samples end up with p < 0.05, some are slightly over 0.05). Let's try a Procrustes rotation and see whether it is significant: 
+
+```{r procrustes}
+# Do a MDS on the distance matrices
+microbiomeMDS <- prcomp(microbiomedist) #monoMDS(microbiomedist) model = c("global","local","linear","hybrid")
+metaboliteMDS <- prcomp(metabolitedist) #monoMDS(metabolitedist)
+# Perform Procrustes
+vare.proc <- procrustes(microbiomeMDS, metaboliteMDS, symmetric=FALSE)
+summary(vare.proc)
+plot(vare.proc)
+plot(vare.proc, kind=2)
+residuals(vare.proc)
+print(protest(microbiomeMDS,metaboliteMDS, scores = "sites", symmetric=FALSE,
+        permutations = how(nperm = 999)))
+protest_res = protest(microbiomeMDS,metaboliteMDS, scores = "sites", symmetric=FALSE,
+        permutations = how(nperm = 999))
+
+ctest <- data.frame(rda1=vare.proc$Yrot[,1],
+                    rda2=vare.proc$Yrot[,2],
+                    xrda1=vare.proc$X[,1],
+                    xrda2=vare.proc$X[,2],
+                    dates=disturbance)
+
+colorBlindBlack8  <- c("#000000", "#E69F00", "#56B4E9", "#009E73", 
+                       "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+all = ggplot(ctest) +
+  geom_point(aes(x=rda1, y=rda2, colour=dates)) +
+  geom_point(aes(x=xrda1, y=xrda2, colour=dates)) +
+  geom_segment(aes(x=rda1,y=rda2,xend=xrda1,yend=xrda2,colour=dates),
+               arrow=arrow(length=unit(0.2,"cm"))) +
+  theme_classic() + 
+  xlab("Principal Component 1") + 
+  ylab("Principal Component 2") + 
+  scale_color_manual(name = "Disturbance",values=colorBlindBlack8[1:3],
+                                breaks = c("Pre substrate addition",
+                                "Post substrate addition 1",
+                                "Post substrate addition 2"),
+                     labels=c("PreD","PostD1","PostD2")) + 
+  ggtitle(paste0("Full matrix, p=",as.character(round(protest_res$signif,4))))
+all
+
+ggsave("procrustesrotation_all_9Oct.jpg")
+```
+
+So we can see that the test of significance on the Procrustes rotation is not significant. Let's do the same thing, but write a function to print everything out first:
+
+```{r writeafunct}
+procrustesfunct <- function(metabolitedist, microbiomedist) {
+  print(mantel(metabolitedist, microbiomedist, permutations = 999))
+  # Do a MDS on the distance matrices
+  microbiomeMDS <- prcomp(microbiomedist) #monoMDS(microbiomedist)
+  metaboliteMDS <- prcomp(metabolitedist) #monoMDS(metabolitedist)
+  # Perform Procrustes
+  vare.proc <- procrustes(microbiomeMDS, metaboliteMDS)
+  summary(vare.proc)
+  plot(vare.proc)
+  plot(vare.proc, kind=2)
+  residuals(vare.proc)
+  print(protest(microbiomeMDS,metaboliteMDS, scores = "sites", 
+          permutations = how(nperm = 999)))
+  protest_res = protest(microbiomeMDS,metaboliteMDS, scores = "sites", 
+          permutations = how(nperm = 999))
+  return(list("vp" = vare.proc,"signif" = protest_res$signif))
+}
+```
+
+Now let's subset to pre-substrate addition:
+
+```{r subset1}
+results = processMetMic(substratefilter = "Pre substrate addition")
+microbiomedist = results$microbiomedist
+metabolitedist = results$metabolitedist
+pcres = procrustesfunct(metabolitedist, microbiomedist)
+vare.proc = pcres$vp
+signif = pcres$signif
+
+ctest <- data.frame(rda1=vare.proc$Yrot[,1],
+                    rda2=vare.proc$Yrot[,2],
+                    xrda1=vare.proc$X[,1],
+                    xrda2=vare.proc$X[,2],
+                    dates="Pre substrate addition")
+
+colorBlindBlack8  <- c("#000000", "#E69F00", "#56B4E9", "#009E73", 
+                       "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+pre = ggplot(ctest) +
+  geom_point(aes(x=rda1, y=rda2, colour=dates)) +
+  geom_point(aes(x=xrda1, y=xrda2, colour=dates)) +
+  geom_segment(aes(x=rda1,y=rda2,xend=xrda1,yend=xrda2,colour=dates),
+               arrow=arrow(length=unit(0.2,"cm"))) +
+  theme_classic() + 
+  xlab("Principal Component 1") + 
+  ylab("Principal Component 2") + 
+  scale_color_manual(name = "Disturbance",values=colorBlindBlack8[1],
+                                breaks = c("Pre substrate addition"),
+                     labels=c("PreD"))+ 
+  ggtitle(paste0("Pre-disturbance, p=",as.character(round(signif,4))))
+pre 
+ggsave("procrustesrotation_pre.jpg")
+```
+
+So none of the tests are significant with only pre-substrate addition data. How about post disturbance 1? 
+
+```{r subset2}
+results = processMetMic(substratefilter = "Post substrate addition 1")
+microbiomedist = results$microbiomedist
+metabolitedist = results$metabolitedist
+pcres = procrustesfunct(metabolitedist, microbiomedist)
+vare.proc = pcres$vp
+signif = pcres$signif
+
+
+ctest <- data.frame(rda1=vare.proc$Yrot[,1],
+                    rda2=vare.proc$Yrot[,2],
+                    xrda1=vare.proc$X[,1],
+                    xrda2=vare.proc$X[,2],
+                    dates="Post substrate addition 1")
+
+colorBlindBlack8  <- c("#000000", "#E69F00", "#56B4E9", "#009E73", 
+                       "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+post1 = ggplot(ctest) +
+  geom_point(aes(x=rda1, y=rda2, colour=dates)) +
+  geom_point(aes(x=xrda1, y=xrda2, colour=dates)) +
+  geom_segment(aes(x=rda1,y=rda2,xend=xrda1,yend=xrda2,colour=dates),
+               arrow=arrow(length=unit(0.2,"cm"))) +
+  theme_classic() + 
+  xlab("Principal Component 1") + 
+  ylab("Principal Component 2") + 
+  scale_color_manual(name = "Disturbance",values=colorBlindBlack8[2],
+                                breaks = c("Post substrate addition 1"),
+                     labels=c("PostD1"))+ 
+  ggtitle(paste0("Post disturbance 1, p=",as.character(round(signif,4))))
+post1
+ggsave("procrustesrotation_post1.jpg")
+```
+
+Or post disturbance 2?
+
+```{r subset3}
+results = processMetMic(substratefilter = "Post substrate addition 2")
+microbiomedist = results$microbiomedist
+metabolitedist = results$metabolitedist
+pcres = procrustesfunct(metabolitedist, microbiomedist)
+vare.proc = pcres$vp
+signif = pcres$signif
+
+ctest <- data.frame(rda1=vare.proc$Yrot[,1],
+                    rda2=vare.proc$Yrot[,2],
+                    xrda1=vare.proc$X[,1],
+                    xrda2=vare.proc$X[,2],
+                    dates="Post substrate addition 2")
+
+colorBlindBlack8  <- c("#000000", "#E69F00", "#56B4E9", "#009E73", 
+                       "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+post2 = ggplot(ctest) +
+  geom_point(aes(x=rda1, y=rda2, colour=dates)) +
+  geom_point(aes(x=xrda1, y=xrda2, colour=dates)) +
+  geom_segment(aes(x=rda1,y=rda2,xend=xrda1,yend=xrda2,colour=dates),
+               arrow=arrow(length=unit(0.2,"cm"))) +
+  theme_classic() + 
+  xlab("Principal Component 1") + 
+  ylab("Principal Component 2") + 
+  scale_color_manual(name = "Disturbance",values=colorBlindBlack8[3],
+                                breaks = c("Post substrate addition 2"),
+                     labels=c("PostD2"))+ 
+  ggtitle(paste0("Post disturbance 2, p=",as.character(round(signif,4))))
+post2
+
+ggsave("procrustesrotation_post2.jpg")
+```
+
+Or post either disturbance? 
+
+```{r subset4}
+metabolite = read.csv("./data/metabolite.csv")
+tomelt = read.csv("./data/LTEE_Newt_Seasonal_OTU_table_97_forprimer.csv")
+tomelt = subset(tomelt, select = c(X.OTU.ID, AmphibID, Timepoint, Date, 
+                                   Substrate.Addition))
+
+# we only consider the timepoints/newts with both metabolite & microbiome data
+metabolite = metabolite %>% left_join(tomelt, by = c("NewtID"="AmphibID",
+                                                   "Timepoint", "Date")) %>%
+tidyr::drop_na(X.OTU.ID) %>%
+dplyr::filter((as.character(Substrate.Addition) == "Post substrate addition 1") | 
+              (as.character(Substrate.Addition) == "Post substrate addition 2") )
+otulist = unique(as.character(metabolite$X.OTU.ID))
+substrates = metabolite$Substrate.Addition
+
+metabolite = subset(metabolite, select = -c(NewtID,	Timepoint,	Date,
+                                            Month,	Season,	Year,	Season_Year,
+                                            Month_Year,	Temp,	DO,	pH,	count,
+                                            X.OTU.ID,Substrate.Addition))
+
+microbiome = read.csv("./data/LTEE_Newt_Seasonal_2.csv")
+microbiome = microbiome[,as.character(colnames(microbiome)) %in% otulist]
+microbiome = microbiome[,otulist]
+microbiome = t(microbiome)
+
+metabolitedist = vegdist(metabolite, method="jaccard",na.rm=TRUE)
+microbiomedist = vegdist(microbiome, method="jaccard",na.rm=TRUE)
+pcres = procrustesfunct(metabolitedist, microbiomedist)
+vare.proc = pcres$vp
+signif = pcres$signif
+
+
+ctest <- data.frame(rda1=vare.proc$Yrot[,1],
+                    rda2=vare.proc$Yrot[,2],
+                    xrda1=vare.proc$X[,1],
+                    xrda2=vare.proc$X[,2],
+                    dates=substrates)
+
+colorBlindBlack8  <- c("#000000", "#E69F00", "#56B4E9", "#009E73", 
+                       "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+postboth = ggplot(ctest) +
+  geom_point(aes(x=rda1, y=rda2, colour=dates)) +
+  geom_point(aes(x=xrda1, y=xrda2, colour=dates)) +
+  geom_segment(aes(x=rda1,y=rda2,xend=xrda1,yend=xrda2,colour=dates),
+               arrow=arrow(length=unit(0.2,"cm"))) +
+  theme_classic() + 
+  xlab("Principal Component 1") + 
+  ylab("Principal Component 2") + 
+  scale_color_manual(name = "Disturbance",values=colorBlindBlack8[2:3],
+                                breaks = c("Post substrate addition 1",
+                                "Post substrate addition 2"),
+                     labels=c("PostD1","PostD2"))+ 
+  ggtitle(paste0("Post disturbance, p=",as.character(round(signif,4))))
+postboth
+
+ggsave("procrustesrotation_postboth.jpg")
+```
+
+```{r procrustesplots}
+cowplot::plot_grid(all+ggtitle("Full matrix"),
+                   pre+ggtitle("Pre-disturbance"),
+                   post1+ggtitle("Post-disturbance 1"),
+                   post2+ggtitle("Post-disturbance 2"),
+                   postboth+ggtitle("Post-disturbance"),ncol=3,labels = c("A","B","C","D","E"))
+ggsave("mantelfigure.pdf",width=11,height=5,units="in",dpi=800)
+ggsave(file="figure7.tiff",dpi=500,width=15,height=10,units="in")
+```

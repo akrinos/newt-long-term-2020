@@ -2,7 +2,8 @@
 # requested by Jeni on 1 October 18 via email. 
 # Written by Arianna Krinos, last edits on 24 June 2020
 
-pacman::p_load(devtools,tidyverse,stringr,qdapRegex,reshape2,plyr,RColorBrewer,vegan,proxy,philentropy)
+pacman::p_load(devtools,tidyverse,stringr,qdapRegex,reshape2,plyr,
+               RColorBrewer,vegan,proxy,philentropy,ade4)
 
 devtools::install_github("https://github.com/GuillemSalazar/EcolUtils")
 #' Effect of individual newt ID on SourceTracker results (proportion OTUs conserved)
@@ -16,6 +17,54 @@ devtools::install_github("https://github.com/GuillemSalazar/EcolUtils")
 #' Effect of individual newt ID on metabolic profiles 
 #' (run permanova on Jaccard matrix with Newt ID as fixed effect)
 
+
+##### Mantel Test & Procrustes #####
+unifrac = read.csv("./data/weightedunifrac.csv") #weighted_unifrac_matrix.csv")
+metabolite = read.csv("./data/metabolite.csv")
+tomelt = read.csv("./data/LTEE_Newt_Seasonal_OTU_table_97_forprimer.csv")
+tomelt = subset(tomelt, select = c(X.OTU.ID, AmphibID, Timepoint, Date, 
+                                   Substrate.Addition))
+metabolite = metabolite %>% left_join(tomelt, by = c("NewtID"="AmphibID",
+                                                     "Timepoint", "Date")) %>%
+  tidyr::drop_na(X.OTU.ID) #%>%
+  #dplyr::filter(as.character(Substrate.Addition) == "Pre substrate addition")
+otulist = unique(as.character(metabolite$X.OTU.ID))
+
+metabolite = subset(metabolite, select = -c(NewtID,	Timepoint,	Date,
+                                            Month,	Season,	Year,	Season_Year,
+                                            Month_Year,	Temp,	DO,	pH,	count,
+                                            X.OTU.ID,Substrate.Addition))
+metabolitedist = vegdist(metabolite, method="bray",na.rm=TRUE)
+microbiome = read.csv("./data/LTEE_Newt_Seasonal_2.csv")
+microbiome = microbiome[,as.character(colnames(microbiome)) %in% otulist]
+#microbiome = subset(microbiome, select = -c(taxonomy,X.OTU.ID))
+microbiome = t(microbiome)
+microbiomedist = vegdist(microbiome, method="bray",na.rm=TRUE)
+
+mantel.rtest(metabolitedist, microbiomedist, nrepet = 999)
+
+microbiomeMDS <- monoMDS(microbiomedist)
+metaboliteMDS <- monoMDS(metabolitedist)
+vare.proc <- procrustes(microbiomeMDS, metaboliteMDS)
+summary(vare.proc)
+plot(vare.proc)
+plot(vare.proc, kind=2)
+residuals(vare.proc)
+protest(microbiomeMDS,metaboliteMDS, scores = "sites", 
+        permutations = how(nperm = 999))
+
+library(ape)
+PCOA_microbiome <- pcoa(microbiomedist)
+PCOA_metabolite <- pcoa(metabolitedist)
+procrustes = procrustes(PCOA_microbiome$values,PCOA_metabolite$values)
+plot(procrustes, kind = 1, type = "text")
+plot(procrustes, kind = 2, type = "text")
+
+protest(PCOA_microbiome$values,PCOA_metabolite$values, scores = "sites", permutations = 999)
+protest(metabolitedist, microbiomedist, scores = "sites", permutations = 999)
+
+vare.proc <- procrustes(metabolitedist, microbiomedist)
+plot(vare.proc)
 ##### Effect of individual newt ID on SourceTracker results (proportion OTUs conserved) #####
 sourcetracker = read.csv("./data/LTEE_Sourcetracker_plain.csv")
 newtsourcetracker = cbind(sourcetracker$AmphibID, sourcetracker$Proportion_Fall2011)
@@ -23,7 +72,7 @@ colnames(newtsourcetracker) = c("AmphibID", "Proportion_Fall2011")
 kruskal.test(Proportion_Fall2011 ~ AmphibID, data = newtsourcetracker)
 
 ##### Effect of individual newt ID on beta diversity #####
-unifrac = read.csv("./data/weighted_unifrac_matrix.csv")
+unifrac = read.csv("./data/weightedunifrac.csv") #weighted_unifrac_matrix.csv")
 rownames(unifrac) = unifrac[,1]
 unifrac = unifrac[,-which(colnames(unifrac) == "X")]
 unifrac_characteristics = matrix(0, ncol = 4, nrow = nrow(unifrac))
